@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARJUNA EV - Motorsport Telemetry DDU & GPS Tracking</title>
+    
+    <!-- External CDN Resources with Safe Fallbacks -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <style>
+        :root {
+            --bg-dark: #07090e;
+            --card-bg: #0d131f;
+            --card-border: #1e293b;
+            --cyan-glow: #00f0ff;
+            --green-glow: #00ff66;
+            --yellow-glow: #ffcc00;
+            --red-glow: #ff3366;
+            --text-main: #f1f5f9;
+            --text-muted: #64748b;
+            --font-orbitron: 'Orbitron', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-rajdhani: 'Rajdhani', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-mono: 'Share Tech Mono', 'Courier New', Courier, monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-rajdhani);
+            padding: 16px;
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Top Header Bar */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0a0f18;
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 10px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-orbitron);
+            font-weight: 900;
+            font-size: 18px;
+            color: var(--text-main);
+            letter-spacing: 1.5px;
+        }
+
+        .brand-badge {
+            background: linear-gradient(135deg, var(--cyan-glow), #0088ff);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-family: var(--font-orbitron);
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab-btn.active {
+            color: var(--cyan-glow);
+            background: rgba(0, 240, 255, 0.08);
+            border-bottom-color: var(--cyan-glow);
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 255, 102, 0.1);
+            border: 1px solid var(--green-glow);
+            color: var(--green-glow);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 800;
+            font-family: var(--font-orbitron);
+            box-shadow: 0 0 12px rgba(0, 255, 102, 0.2);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--green-glow);
+            border-radius: 50%;
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 102, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(0, 255, 102, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 102, 0); }
+        }
+
+        /* Layout Grid */
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.3fr 1fr;
+            gap: 16px;
+        }
+
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 1024px) {
+            .top-grid, .bottom-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Telemetry Cards */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-orbitron);
+            font-size: 12px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .card-header .val {
+            font-size: 18px;
+            color: var(--green-glow);
+            font-weight: 800;
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
+        }
+
+        /* Progress Bars */
+        .bar-container {
+            width: 100%;
+            height: 95px;
+            background: #04070d;
+            border: 1px solid #1a2333;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: flex-end;
+            padding: 4px;
+        }
+
+        .bar-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ff66, #00f0ff);
+            box-shadow: 0 0 15px rgba(0, 255, 102, 0.5);
+            border-radius: 4px;
+            transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .bar-fill.brake {
+            background: linear-gradient(90deg, #ff3366, #ffcc00);
+            box-shadow: 0 0 15px rgba(255, 51, 102, 0.5);
+            width: 0%;
+        }
+
+        .bar-grid-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(90deg, transparent 9px, rgba(13, 19, 31, 0.8) 10px);
+            background-size: 10% 100%;
+            pointer-events: none;
+        }
+
+        /* GPS Telemetry Metrics Box */
+        .gps-metrics-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: #060a12;
+            border: 1px solid #162032;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            font-family: var(--font-orbitron);
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+
+        .metric-val {
+            font-size: 14px;
+            font-family: var(--font-orbitron);
+            font-weight: 700;
+            color: var(--cyan-glow);
+        }
+
+        /* Core Display Unit (Center Card) */
+        .core-card {
+            background: linear-gradient(180deg, #0d1424 0%, #080d18 100%);
+            border: 1px solid #1e2d4a;
+            align-items: stretch;
+            justify-content: space-between;
+        }
+
+        .core-top-info {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-orbitron);
+            font-size: 11px;
+            color: var(--text-muted);
+            border-bottom: 1px solid #1a273e;
+            padding-bottom: 8px;
+        }
+
+        .core-top-info span {
+            color: var(--cyan-glow);
+            font-weight: 800;
+        }
+
+        .speed-gear-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 36px;
+            margin: 10px 0;
+        }
+
+        .gear-wrapper, .speed-wrapper {
+            text-align: center;
+        }
+
+        .gear-val {
+            font-family: var(--font-orbitron);
+            font-size: 85px;
+            font-weight: 900;
+            color: var(--yellow-glow);
+            text-shadow: 0 0 25px rgba(255, 204, 0, 0.5);
+            line-height: 0.9;
+        }
+
+        .speed-val {
+            font-family: var(--font-orbitron);
+            font-size: 85px;
+            font-weight: 900;
+            color: var(--text-main);
+            text-shadow: 0 0 20px rgba(241, 245, 249, 0.3);
+            line-height: 0.9;
+        }
+
+        .divider-line {
+            width: 2px;
+            height: 75px;
+            background: linear-gradient(180deg, transparent, #1e2e4a, transparent);
+        }
+
+        .rpm-bar-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .rpm-labels {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-orbitron);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .rpm-bar-container {
+            height: 14px;
+            background: #04070d;
+            border-radius: 7px;
+            border: 1px solid #1e2d4a;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .rpm-fill {
+            height: 100%;
+            width: 80%;
+            background: linear-gradient(90deg, #00ff66 0%, #ffcc00 70%, #ff3366 100%);
+            box-shadow: 0 0 10px rgba(0, 255, 102, 0.5);
+            transition: width 0.15s ease;
+        }
+
+        .rpm-target-marker {
+            position: absolute;
+            top: 0; bottom: 0;
+            left: 73.3%; /* 2200 / 3000 */
+            width: 3px;
+            background: #ffffff;
+            box-shadow: 0 0 8px #ffffff;
+            z-index: 2;
+        }
+
+        /* Thermal Badge */
+        .thermal-badge {
+            background: rgba(0, 255, 102, 0.08);
+            border: 1px solid var(--green-glow);
+            color: var(--green-glow);
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+            font-family: var(--font-orbitron);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            box-shadow: 0 0 10px rgba(0, 255, 102, 0.15);
+        }
+
+        .thermal-badge.warning {
+            background: rgba(255, 51, 102, 0.12);
+            border-color: var(--red-glow);
+            color: var(--red-glow);
+            box-shadow: 0 0 12px rgba(255, 51, 102, 0.3);
+        }
+
+        /* Map Box */
+        .map-wrapper {
+            position: relative;
+            width: 100%;
+            height: 280px;
+            border-radius: 8px;
+            border: 1px solid #1a273e;
+            overflow: hidden;
+            background: #05080f;
+        }
+
+        #leafletMap, #canvasMapFallback {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+        }
+
+        /* Custom Dark Styling for Leaflet Tiles */
+        .leaflet-tile-pane {
+            filter: invert(100%) hue-rotate(180deg) brightness(90%) contrast(90%);
+        }
+
+        /* STM32 Hardware LEDs Replica */
+        .led-group {
+            display: flex;
+            justify-content: space-around;
+            gap: 12px;
+            margin: 4px 0;
+        }
+
+        .led-box {
+            background: #060a12;
+            border: 1px solid #162032;
+            padding: 12px 8px;
+            border-radius: 8px;
+            text-align: center;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .led-bulb {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #121927;
+            border: 2px solid #1c273a;
+            transition: all 0.2s ease;
+        }
+
+        .led-bulb.red.active {
+            background: var(--red-glow);
+            border-color: #ff99aa;
+            box-shadow: 0 0 18px var(--red-glow), inset 0 0 6px #ffffff;
+        }
+
+        .led-bulb.yellow.active {
+            background: var(--yellow-glow);
+            border-color: #fffaaa;
+            box-shadow: 0 0 18px var(--yellow-glow), inset 0 0 6px #ffffff;
+        }
+
+        .led-bulb.green.active {
+            background: var(--green-glow);
+            border-color: #aaffcc;
+            box-shadow: 0 0 18px var(--green-glow), inset 0 0 6px #ffffff;
+        }
+
+        .led-title {
+            font-size: 10px;
+            font-family: var(--font-orbitron);
+            color: var(--text-muted);
+            line-height: 1.2;
+        }
+
+        /* LCD 20x4 Matrix Display Screen */
+        .lcd-matrix-container {
+            background: #020f07;
+            border: 2px solid rgba(0, 255, 102, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: var(--font-mono);
+            color: var(--green-glow);
+            font-size: 13px;
+            line-height: 1.6;
+            text-shadow: 0 0 6px rgba(0, 255, 102, 0.8);
+            box-shadow: inset 0 0 15px rgba(0, 255, 102, 0.15), 0 0 12px rgba(0, 0, 0, 0.8);
+            letter-spacing: 0.5px;
+            min-height: 110px;
+        }
+
+        /* Telemetry Control Dock / Simulator */
+        .control-dock {
+            background: #0a0f19;
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .dock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-orbitron);
+            font-size: 12px;
+            color: var(--cyan-glow);
+            border-bottom: 1px solid #162032;
+            padding-bottom: 8px;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-group label {
+            font-size: 11px;
+            font-family: var(--font-orbitron);
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .control-group label span {
+            color: var(--cyan-glow);
+            font-weight: 700;
+        }
+
+        input[type=range] {
+            accent-color: var(--cyan-glow);
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .preset-btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
+        .preset-btn {
+            background: #101726;
+            border: 1px solid #1e2b45;
+            color: var(--text-main);
+            font-family: var(--font-orbitron);
+            font-size: 11px;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .preset-btn:hover {
+            border-color: var(--cyan-glow);
+            color: var(--cyan-glow);
+        }
+
+        .preset-btn.danger:hover {
+            border-color: var(--red-glow);
+            color: var(--red-glow);
+        }
+
+        /* Documentation & Analytics Panels */
+        .doc-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .doc-panel h3 {
+            font-family: var(--font-orbitron);
+            color: var(--cyan-glow);
+            font-size: 16px;
+        }
+
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        .doc-table th, .doc-table td {
+            border: 1px solid #1e293b;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .doc-table th {
+            background: #0a0f18;
+            color: var(--cyan-glow);
+            font-family: var(--font-orbitron);
+        }
+
+        code-block {
+            background: #04070d;
+            border: 1px solid #1a2333;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: #33ff99;
+            white-space: pre-wrap;
+            display: block;
+            overflow-x: auto;
+        }
+
+        canvas.chart-canvas {
+            width: 100% !important;
+            height: 260px !important;
+            background: #05080e;
+            border-radius: 8px;
+            border: 1px solid #1a2333;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <div class="header-bar">
+        <div class="brand-title">
+            <span>ARJUNA EV</span>
+            <span class="brand-badge">TELEMETRY DDU</span>
+        </div>
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('ddu')">COCKPIT DDU</button>
+            <button class="tab-btn" onclick="switchTab('analytics')">PITWALL ANALYTICS</button>
+            <button class="tab-btn" onclick="switchTab('gps')">GPS INSPECTOR</button>
+            <button class="tab-btn" onclick="switchTab('docs')">STM32 & SIM7600 DOCS</button>
+        </div>
+        <div class="status-container">
+            <div class="status-badge" id="mqttStatusBadge">
+                <div class="pulse-dot"></div>
+                <span>MQTT: ONLINE (100Hz)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 1: COCKPIT DDU DISPLAY -->
+    <div id="tab-ddu" class="tab-content active">
+        
+        <!-- Top Grid -->
+        <div class="top-grid">
+            
+            <!-- Card 1: Throttle (APPS) & GPS Telemetry -->
+            <div class="card">
+                <div class="card-header">
+                    <span>THROTTLE (APPS)</span>
+                    <span class="val" id="appsValText">100.0%</span>
+                </div>
+                <div class="bar-container">
+                    <div class="bar-fill" id="appsBarFill" style="width: 100%;"></div>
+                    <div class="bar-grid-overlay"></div>
+                </div>
+
+                <div class="card-header" style="margin-top: 4px;">
+                    <span>GPS TELEMETRY DATA</span>
+                    <span style="font-size: 10px; color: var(--cyan-glow);">SIM7600G-H</span>
+                </div>
+                <div class="gps-metrics-box">
+                    <div class="metric-item">
+                        <span class="metric-label">LATITUDE</span>
+                        <span class="metric-val" id="gpsLatVal">-7.77530</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">LONGITUDE</span>
+                        <span class="metric-val" id="gpsLngVal">110.37420</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">ALTITUDE</span>
+                        <span class="metric-val" id="gpsAltVal">142.5 m</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">SATELLITES</span>
+                        <span class="metric-val" id="gpsSatVal" style="color: var(--green-glow);">14 SAT (3D)</span>
+                    </div>
+                    <div class="metric-item" style="grid-column: span 2;">
+                        <span class="metric-label">HDOP PRECISION</span>
+                        <span class="metric-val" id="gpsHdopVal" style="color: var(--green-glow);">0.82 (OPTIMAL)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Core Display Unit (Gear, Speed, RPM) -->
+            <div class="card core-card">
+                <div class="core-top-info">
+                    <div>SECTOR <span id="sectorVal">S1</span></div>
+                    <div>MODE: <span id="raceModeVal">RACE ENDURANCE</span></div>
+                    <div>GPS FIX: <span id="gpsFixVal">3D RTK</span></div>
+                </div>
+
+                <div class="speed-gear-container">
+                    <div class="gear-wrapper">
+                        <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-orbitron);">GEAR</div>
+                        <div class="gear-val" id="gearVal">6</div>
+                    </div>
+                    <div class="divider-line"></div>
+                    <div class="speed-wrapper">
+                        <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-orbitron);">SPEED (KM/H)</div>
+                        <div class="speed-val" id="speedVal">165</div>
+                    </div>
+                </div>
+
+                <div class="rpm-bar-wrap">
+                    <div class="rpm-labels">
+                        <span>WHEEL SPEED: <b id="rpmValText" style="color: var(--cyan-glow);">2500 RPM</b></span>
+                        <span>TARGET: 2200 RPM</span>
+                    </div>
+                    <div class="rpm-bar-container">
+                        <div class="rpm-target-marker" title="Target 2200 RPM"></div>
+                        <div class="rpm-fill" id="rpmBarFill" style="width: 83.3%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: Brake (BSE) & Thermal Status -->
+            <div class="card">
+                <div class="card-header">
+                    <span>BRAKE (BSE)</span>
+                    <span class="val" id="bseValText" style="color: var(--red-glow);">0.0%</span>
+                </div>
+                <div class="bar-container">
+                    <div class="bar-fill brake" id="bseBarFill" style="width: 0%;"></div>
+                    <div class="bar-grid-overlay"></div>
+                </div>
+
+                <div class="card-header" style="margin-top: 4px;">
+                    <span>BRAKE TEMP</span>
+                    <span class="val" id="tempValText" style="color: var(--cyan-glow);">139.6°C</span>
+                </div>
+                <div class="thermal-badge" id="thermalBadge">
+                    THERMAL: OPTIMAL (150-350°C)
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Bottom Grid -->
+        <div class="bottom-grid">
+            
+            <!-- Card 4: Live Interactive GPS Track Map -->
+            <div class="card">
+                <div class="card-header">
+                    <span>LIVE GPS LOCATION TRACKING</span>
+                    <span style="font-size: 10px; color: var(--green-glow);" id="mapStatusText">● LIVE TRAJECTORY</span>
+                </div>
+                <div class="map-wrapper">
+                    <!-- Leaflet Container -->
+                    <div id="leafletMap"></div>
+                    <!-- Fallback Canvas Map (Triggers if Leaflet is blocked/offline) -->
+                    <canvas id="canvasMapFallback" style="display: none;"></canvas>
+                </div>
+            </div>
+
+            <!-- Card 5: STM32 Hardware Replica & LCD Screen -->
+            <div class="card">
+                <div class="card-header">
+                    <span>STM32 HARDWARE LEDS (GPIOB)</span>
+                    <span style="font-size: 10px; color: var(--text-muted);">SD LOG: SPI PA4-7</span>
+                </div>
+                <div class="led-group">
+                    <div class="led-box">
+                        <div class="led-bulb red" id="ledRedBulb"></div>
+                        <div class="led-title">PB12<br>RED (FAULT)</div>
+                    </div>
+                    <div class="led-box">
+                        <div class="led-bulb yellow" id="ledYellowBulb"></div>
+                        <div class="led-title">PB8<br>YELLOW (BRK)</div>
+                    </div>
+                    <div class="led-box">
+                        <div class="led-bulb green active" id="ledGreenBulb"></div>
+                        <div class="led-title">PB9<br>GREEN (DRV)</div>
+                    </div>
+                </div>
+
+                <div class="card-header" style="margin-top: 4px;">
+                    <span>LCD 20x4 MATRIX DISPLAY (I2C 0x27)</span>
+                </div>
+                <div class="lcd-matrix-container" id="lcdMatrixScreen">
+                    APPS:100.0% BSE:  0.0%<br>
+                    RPM: 2500 SPD:165km/h<br>
+                    BRK TEMP: 139.6C (OK)<br>
+                    SYS: NORMAL / READY
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Interactive Telemetry Control Dock / Test Simulator -->
+        <div class="control-dock">
+            <div class="dock-header">
+                <span>INTERACTIVE TELEMETRY TEST DOCK & SIMULATOR</span>
+                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <input type="checkbox" id="autoSimToggle" checked onchange="toggleAutoSim(this.checked)">
+                    <span>AUTO LIVE STREAMING SIMULATION</span>
+                </label>
+            </div>
+            
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label>APPS (Gas): <span id="ctrlAppsVal">100%</span></label>
+                    <input type="range" id="ctrlApps" min="0" max="100" value="100" oninput="onManualInput()">
+                </div>
+                <div class="control-group">
+                    <label>BSE (Brake): <span id="ctrlBseVal">0%</span></label>
+                    <input type="range" id="ctrlBse" min="0" max="100" value="0" oninput="onManualInput()">
+                </div>
+                <div class="control-group">
+                    <label>SPEED: <span id="ctrlSpeedVal">165 km/h</span></label>
+                    <input type="range" id="ctrlSpeed" min="0" max="220" value="165" oninput="onManualInput()">
+                </div>
+                <div class="control-group">
+                    <label>RPM: <span id="ctrlRpmVal">2500</span></label>
+                    <input type="range" id="ctrlRpm" min="0" max="3200" value="2500" oninput="onManualInput()">
+                </div>
+                <div class="control-group">
+                    <label>BRAKE TEMP: <span id="ctrlTempVal">139.6 °C</span></label>
+                    <input type="range" id="ctrlTemp" min="20" max="450" value="140" oninput="onManualInput()">
+                </div>
+                <div class="control-group">
+                    <label>HDOP PRECISION: <span id="ctrlHdopVal">0.82</span></label>
+                    <input type="range" id="ctrlHdop" min="0.5" max="5.0" step="0.1" value="0.8" oninput="onManualInput()">
+                </div>
+            </div>
+
+            <div class="preset-btn-group">
+                <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-orbitron); align-self: center;">TEST PRESETS:</span>
+                <button class="preset-btn" onclick="applyPreset('normal')">Normal Driving</button>
+                <button class="preset-btn" onclick="applyPreset('braking')">Hard Braking (BSE ≥ 10%)</button>
+                <button class="preset-btn danger" onclick="applyPreset('fault')">Brake-Throttle Implausibility (Cutoff Fault)</button>
+                <button class="preset-btn" onclick="applyPreset('highTemp')">High Thermal Alert (>300°C)</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TAB 2: PITWALL ANALYTICS -->
+    <div id="tab-analytics" class="tab-content">
+        <div class="doc-panel">
+            <h3>PITWALL REALTIME TELEMETRY ANALYTICS</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">Real-time waveform logging of APPS, BSE, Wheel Speed, and Thermal metrics.</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div>
+                    <h4 style="font-family: var(--font-orbitron); font-size: 12px; margin-bottom: 8px; color: var(--cyan-glow);">PEDAL POSITION LOG (APPS vs BSE)</h4>
+                    <canvas id="pedalChart" class="chart-canvas"></canvas>
+                </div>
+                <div>
+                    <h4 style="font-family: var(--font-orbitron); font-size: 12px; margin-bottom: 8px; color: var(--green-glow);">WHEEL SPEED & BRAKE TEMP</h4>
+                    <canvas id="speedChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: GPS INSPECTOR -->
+    <div id="tab-gps" class="tab-content">
+        <div class="doc-panel">
+            <h3>SIM7600G-H GPS PRECISION INSPECTOR</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">GNSS multi-constellation satellite lock status and HDOP filtration diagnostics.</p>
+
+            <table class="doc-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Current Value</th>
+                        <th>Quality Rating</th>
+                        <th>Action / Filter Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Latitude / Longitude</td>
+                        <td id="diagGpsCoords">-7.77530, 110.37420</td>
+                        <td><span style="color: var(--green-glow);">VALID 3D FIX</span></td>
+                        <td>Accepted by Firmware</td>
+                    </tr>
+                    <tr>
+                        <td>HDOP (Horizontal Dilution)</td>
+                        <td id="diagGpsHdop">0.82</td>
+                        <td><span style="color: var(--green-glow);">EXCELLENT (&lt; 1.0)</span></td>
+                        <td>No Position Drift Detected</td>
+                    </tr>
+                    <tr>
+                        <td>Active Satellites</td>
+                        <td id="diagGpsSat">14 Satellites</td>
+                        <td><span style="color: var(--green-glow);">HIGH LOCK</span></td>
+                        <td>GPS + GLONASS + Galileo active</td>
+                    </tr>
+                    <tr>
+                        <td>Calculated Speed</td>
+                        <td id="diagGpsSpeed">165 km/h</td>
+                        <td>OPTIMAL</td>
+                        <td>Delta distance &lt; 16m/s limit</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB 4: STM32 & SIM7600 DOCS -->
+    <div id="tab-docs" class="tab-content">
+        <div class="doc-panel">
+            <h3>STM32F405 to SIM7600G-H HARDWARE & PROTOCOL SPECIFICATION</h3>
+            
+            <h4 style="font-family: var(--font-orbitron); color: var(--cyan-glow); font-size: 13px;">1. Pinout Wiring Diagram</h4>
+            <table class="doc-table">
+                <thead>
+                    <tr>
+                        <th>STM32F405 Pin</th>
+                        <th>SIM7600G-H Pin</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>PA9 (USART1_TX)</td>
+                        <td>RXD</td>
+                        <td>AT Commands transmission line from STM32 to SIM7600</td>
+                    </tr>
+                    <tr>
+                        <td>PA10 (USART1_RX)</td>
+                        <td>TXD</td>
+                        <td>Response data reception line from SIM7600 to STM32</td>
+                    </tr>
+                    <tr>
+                        <td>PB0 (GPIO)</td>
+                        <td>PWRKEY</td>
+                        <td>Pulse LOW (approx. 1 sec) for module soft power up</td>
+                    </tr>
+                    <tr>
+                        <td>PA4, PA5, PA6, PA7</td>
+                        <td>MicroSD SPI</td>
+                        <td>CS, SCK, MISO, MOSI lines for local backup logging</td>
+                    </tr>
+                    <tr>
+                        <td>PB12, PB8, PB9</td>
+                        <td>LED Indicators</td>
+                        <td>Red (Fault), Yellow (Brake), Green (Drive) LEDs</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4 style="font-family: var(--font-orbitron); color: var(--cyan-glow); font-size: 13px; margin-top: 12px;">2. SIM7600 AT Commands Initialization Sequence</h4>
+            <code-block>
+// 1. Enable Multi-GNSS for high accuracy
+AT+CGPS=0
+AT+CGNSSMODE=15               // GPS + GLONASS + BeiDou + Galileo
+AT+CGPS=1
+
+// 2. MQTT Broker Connection
+AT+CMQTTSTART
+AT+CMACCQ=0,"arjuna_ev_client",0
+AT+CMQTTCONNECT=0,"tcp://broker.hivemq.com:1883",60,1
+
+// 3. Publish Telemetry JSON Payload
+AT+CMQTTTOPIC=0,20
+arjuna_ev/telemetry
+AT+CMQTTPAYLOAD=0,110
+{"apps":100.0,"bse":0.0,"speed":165,"rpm":2500,"temp":139.6,"lat":-7.77530,"lng":110.37420,"hdop":0.82}
+AT+CMQTTPUB=0,1,60
+            </code-block>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // System State
+        const state = {
+            apps: 100.0,
+            bse: 0.0,
+            speed: 165,
+            rpm: 2500,
+            gear: '6',
+            temp: 139.6,
+            lat: -7.77530,
+            lng: 110.37420,
+            alt: 142.5,
+            sat: 14,
+            hdop: 0.82,
+            autoSim: true,
+            activeTab: 'ddu',
+            pathHistory: [[-7.77530, 110.37420]]
+        };
+
+        let leafletMap = null;
+        let carMarker = null;
+        let trackPolyline = null;
+        let isLeafletActive = false;
+
+        // Initialize App on DOM Ready
+        document.addEventListener("DOMContentLoaded", function () {
+            initMap();
+            initCharts();
+            updateUI();
+
+            // Start Real-time Loop (500ms updates)
+            setInterval(gameLoop, 500);
+        });
+
+        // Tab Switching
+        function switchTab(tabName) {
+            state.activeTab = tabName;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            if (tabName === 'ddu' && leafletMap) {
+                setTimeout(() => { leafletMap.invalidateSize(); }, 100);
+            }
+        }
+
+        // Initialize Map with Robust Fallback
+        function initMap() {
+            try {
+                if (typeof L !== 'undefined') {
+                    leafletMap = L.map('leafletMap', { zoomControl: false }).setView([state.lat, state.lng], 16);
+                    
+                    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: 'OpenStreetMap'
+                    }).addTo(leafletMap);
+
+                    const carIcon = L.divIcon({
+                        className: 'custom-car-marker',
+                        html: `<div style="background: #00f0ff; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 0 12px #00f0ff;"></div>`,
+                        iconSize: [16, 16]
+                    });
+
+                    carMarker = L.marker([state.lat, state.lng], { icon: carIcon }).addTo(leafletMap);
+                    trackPolyline = L.polyline(state.pathHistory, { color: '#00f0ff', weight: 3 }).addTo(leafletMap);
+                    isLeafletActive = true;
+                } else {
+                    enableCanvasMapFallback();
+                }
+            } catch (err) {
+                console.warn("Leaflet map initialization failed, using Canvas fallback:", err);
+                enableCanvasMapFallback();
+            }
+        }
+
+        function enableCanvasMapFallback() {
+            document.getElementById('leafletMap').style.display = 'none';
+            const canvas = document.getElementById('canvasMapFallback');
+            canvas.style.display = 'block';
+            document.getElementById('mapStatusText').innerText = '● CANVAS RADAR (OFFLINE)';
+            drawCanvasMap();
+        }
+
+        // Canvas Map Fallback Renderer
+        function drawCanvasMap() {
+            const canvas = document.getElementById('canvasMapFallback');
+            if (!canvas || canvas.style.display === 'none') return;
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#05080f';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw Radar Grid
+            ctx.strokeStyle = '#121e33';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < w; x += 30) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            }
+            for (let y = 0; y < h; y += 30) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+
+            // Draw Radar Rings
+            const cx = w / 2;
+            const cy = h / 2;
+            ctx.strokeStyle = '#1a2b4a';
+            for (let r = 40; r < 140; r += 35) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Draw Trajectory
+            if (state.pathHistory.length > 1) {
+                ctx.strokeStyle = '#00f0ff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                state.pathHistory.forEach((pt, i) => {
+                    const px = cx + (pt[1] - state.lng) * 200000;
+                    const py = cy - (pt[0] - state.lat) * 200000;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                });
+                ctx.stroke();
+            }
+
+            // Draw Car Ping
+            ctx.fillStyle = '#00f0ff';
+            ctx.shadowColor = '#00f0ff';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // Main Simulation Loop
+        function gameLoop() {
+            if (state.autoSim) {
+                // Simulate vehicle movements
+                state.lat += (Math.random() - 0.45) * 0.00006;
+                state.lng += (Math.random() - 0.35) * 0.00006;
+                state.apps = Math.min(100, Math.max(0, state.apps + (Math.random() * 6 - 3)));
+                state.speed = Math.floor(state.apps * 1.65);
+                state.rpm = Math.floor(state.speed * 15.15);
+                state.temp = 135.0 + (state.speed * 0.03) + (Math.random() * 2);
+
+                // Sync sliders
+                document.getElementById('ctrlApps').value = state.apps;
+                document.getElementById('ctrlBse').value = state.bse;
+                document.getElementById('ctrlSpeed').value = state.speed;
+                document.getElementById('ctrlRpm').value = state.rpm;
+                document.getElementById('ctrlTemp').value = state.temp;
+            }
+
+            // Append trajectory
+            state.pathHistory.push([state.lat, state.lng]);
+            if (state.pathHistory.length > 40) state.pathHistory.shift();
+
+            updateUI();
+            updateCharts();
+        }
+
+        // Update UI
+        function updateUI() {
+            // Evaluasi Safety Logic APPS & BSE
+            const isFault = (state.apps >= 25 && state.bse >= 10);
+            const isBraking = (state.bse >= 10);
+            const isDriving = (state.apps > 5 && state.bse < 10);
+
+            // Text Values
+            document.getElementById('appsValText').innerText = state.apps.toFixed(1) + '%';
+            document.getElementById('appsBarFill').style.width = state.apps + '%';
+
+            document.getElementById('bseValText').innerText = state.bse.toFixed(1) + '%';
+            document.getElementById('bseBarFill').style.width = state.bse + '%';
+
+            document.getElementById('speedVal').innerText = isFault ? 0 : state.speed;
+            document.getElementById('rpmValText').innerText = (isFault ? 0 : state.rpm) + ' RPM';
+            document.getElementById('rpmBarFill').style.width = Math.min(100, ((isFault ? 0 : state.rpm) / 3000) * 100) + '%';
+
+            document.getElementById('gearVal').innerText = isFault ? 'N' : state.gear;
+            document.getElementById('tempValText').innerText = state.temp.toFixed(1) + '°C';
+
+            // Thermal Badge
+            const thermalBadge = document.getElementById('thermalBadge');
+            if (state.temp > 300) {
+                thermalBadge.innerText = 'THERMAL: OVERHEAT ALERT!';
+                thermalBadge.className = 'thermal-badge warning';
+            } else {
+                thermalBadge.innerText = 'THERMAL: OPTIMAL (150-350°C)';
+                thermalBadge.className = 'thermal-badge';
+            }
+
+            // GPS Text
+            document.getElementById('gpsLatVal').innerText = state.lat.toFixed(5);
+            document.getElementById('gpsLngVal').innerText = state.lng.toFixed(5);
+            document.getElementById('gpsAltVal').innerText = state.alt.toFixed(1) + ' m';
+            document.getElementById('gpsSatVal').innerText = state.sat + ' SAT (3D)';
+            document.getElementById('gpsHdopVal').innerText = state.hdop.toFixed(2) + (state.hdop <= 1.0 ? ' (OPTIMAL)' : ' (MODERATE)');
+
+            // Diagnostics Inspector Sync
+            document.getElementById('diagGpsCoords').innerText = `${state.lat.toFixed(5)}, ${state.lng.toFixed(5)}`;
+            document.getElementById('diagGpsHdop').innerText = state.hdop.toFixed(2);
+            document.getElementById('diagGpsSat').innerText = `${state.sat} Satellites`;
+            document.getElementById('diagGpsSpeed').innerText = `${state.speed} km/h`;
+
+            // LEDs Hardware Reaction
+            document.getElementById('ledRedBulb').classList.toggle('active', isFault);
+            document.getElementById('ledYellowBulb').classList.toggle('active', isBraking);
+            document.getElementById('ledGreenBulb').classList.toggle('active', isDriving && !isFault);
+
+            // LCD Matrix 20x4 Screen Text
+            document.getElementById('lcdMatrixScreen').innerHTML = 
+                `APPS:${state.apps.toFixed(1).padStart(5, ' ')}% BSE:${state.bse.toFixed(1).padStart(5, ' ')}%<br>` +
+                `RPM:${(isFault?0:state.rpm).toString().padStart(4, ' ')} SPD:${(isFault?0:state.speed).toString().padStart(3, ' ')}km/h<br>` +
+                `BRK TEMP:${state.temp.toFixed(1)}C (${state.temp > 300 ? 'HOT' : 'OK'})<br>` +
+                `SYS: ${isFault ? 'IMPLAUS CUTOFF' : 'NORMAL / READY'}`;
+
+            // Map Position Update
+            if (isLeafletActive && leafletMap && carMarker && trackPolyline) {
+                const newPos = [state.lat, state.lng];
+                carMarker.setLatLng(newPos);
+                trackPolyline.setLatLngs(state.pathHistory);
+                leafletMap.panTo(newPos, { animate: true });
+            } else {
+                drawCanvasMap();
+            }
+
+            // Sync Control Labels
+            document.getElementById('ctrlAppsVal').innerText = state.apps.toFixed(0) + '%';
+            document.getElementById('ctrlBseVal').innerText = state.bse.toFixed(0) + '%';
+            document.getElementById('ctrlSpeedVal').innerText = state.speed + ' km/h';
+            document.getElementById('ctrlRpmVal').innerText = state.rpm;
+            document.getElementById('ctrlTempVal').innerText = state.temp.toFixed(1) + ' °C';
+            document.getElementById('ctrlHdopVal').innerText = state.hdop.toFixed(2);
+        }
+
+        // Manual Controls Input Handler
+        function onManualInput() {
+            state.autoSim = false;
+            document.getElementById('autoSimToggle').checked = false;
+
+            state.apps = parseFloat(document.getElementById('ctrlApps').value);
+            state.bse = parseFloat(document.getElementById('ctrlBse').value);
+            state.speed = parseInt(document.getElementById('ctrlSpeed').value);
+            state.rpm = parseInt(document.getElementById('ctrlRpm').value);
+            state.temp = parseFloat(document.getElementById('ctrlTemp').value);
+            state.hdop = parseFloat(document.getElementById('ctrlHdop').value);
+
+            updateUI();
+        }
+
+        function toggleAutoSim(val) {
+            state.autoSim = val;
+        }
+
+        // Test Presets
+        function applyPreset(preset) {
+            state.autoSim = false;
+            document.getElementById('autoSimToggle').checked = false;
+
+            if (preset === 'normal') {
+                state.apps = 100; state.bse = 0; state.speed = 165; state.rpm = 2500; state.temp = 140;
+            } else if (preset === 'braking') {
+                state.apps = 0; state.bse = 65; state.speed = 45; state.rpm = 800; state.temp = 210;
+            } else if (preset === 'fault') {
+                state.apps = 80; state.bse = 30; state.speed = 0; state.rpm = 0; state.temp = 180;
+            } else if (preset === 'highTemp') {
+                state.apps = 90; state.bse = 0; state.speed = 180; state.rpm = 2750; state.temp = 340;
+            }
+
+            document.getElementById('ctrlApps').value = state.apps;
+            document.getElementById('ctrlBse').value = state.bse;
+            document.getElementById('ctrlSpeed').value = state.speed;
+            document.getElementById('ctrlRpm').value = state.rpm;
+            document.getElementById('ctrlTemp').value = state.temp;
+
+            updateUI();
+        }
+
+        // Simple HTML5 Canvas Charts for Pitwall Analytics
+        let pedalHistory = Array(20).fill(0);
+        let speedHistory = Array(20).fill(0);
+
+        function initCharts() {
+            // Initialized dynamically during update
+        }
+
+        function updateCharts() {
+            if (state.activeTab !== 'analytics') return;
+
+            pedalHistory.push(state.apps);
+            if (pedalHistory.length > 20) pedalHistory.shift();
+
+            speedHistory.push(state.speed);
+            if (speedHistory.length > 20) speedHistory.shift();
+
+            drawCanvasChart('pedalChart', pedalHistory, '#00ff66');
+            drawCanvasChart('speedChart', speedHistory, '#00f0ff');
+        }
+
+        function drawCanvasChart(canvasId, data, color) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 240;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#05080e';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw Grid Lines
+            ctx.strokeStyle = '#121e33';
+            ctx.lineWidth = 1;
+            for (let y = 30; y < h; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+
+            // Draw Line Chart
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            const step = w / (data.length - 1);
+            data.forEach((val, i) => {
+                const x = i * step;
+                const y = h - (val / 200) * (h - 20) - 10;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>
